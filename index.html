@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TV Canlı Yayın Uygulaması</title>
+  <style>
+    /* Genel ayarlar */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+      font-family: 'Roboto', sans-serif;
+    }
+    /* Tam ekran video kapsayıcısı */
+    .video-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 1;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    /* Kanal paneli (açılır/kapanır) */
+    .channel-overlay {
+      position: absolute;
+      top: 0;
+      left: -370px; /* Başlangıçta ekran dışı */
+      width: 350px;
+      height: 100%;
+      background: rgba(20, 20, 20, 0.98);
+      box-shadow: 2px 0 10px rgba(0, 0, 0, 0.7);
+      transition: left 0.3s ease;
+      z-index: 2;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+    }
+    .channel-overlay.open {
+      left: 0;
+    }
+    .channel-overlay h2 {
+      margin: 0 0 20px;
+      text-align: center;
+      font-size: 26px;
+      border-bottom: 1px solid #444;
+      padding-bottom: 10px;
+    }
+    /* Arama kutusu */
+    .search-container {
+      margin-bottom: 20px;
+    }
+    .search-container input {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 5px;
+      outline: none;
+      font-size: 16px;
+    }
+    /* Kanal listesi */
+    .channel-list {
+      flex: 1;
+      overflow-y: auto;
+    }
+    .channel-item {
+      display: flex;
+      align-items: center;
+      padding: 10px;
+      margin-bottom: 15px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      transition: transform 0.2s, background 0.2s, box-shadow 0.2s;
+    }
+    .channel-item.focused {
+      background: rgba(255, 255, 255, 0.2);
+      box-shadow: 0 0 10px #ff0;
+      transform: scale(1.03);
+    }
+    .channel-thumbnail {
+      width: 60px;
+      height: 60px;
+      background-size: cover;
+      background-position: center;
+      border-radius: 8px;
+      margin-right: 15px;
+      flex-shrink: 0;
+    }
+    .channel-title {
+      font-size: 20px;
+      color: #fff;
+    }
+    /* Yükleniyor göstergesi */
+    .loader {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #fff;
+      font-size: 18px;
+      z-index: 3;
+    }
+  </style>
+  <!-- hls.js kütüphanesi -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+<body>
+  <!-- Tam ekran video alanı -->
+  <div class="video-container">
+    <video id="tvPlayer" autoplay muted>
+      <source src="https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4" type="video/mp4" />
+      Tarayıcınız video etiketini desteklemiyor.
+    </video>
+  </div>
+
+  <!-- Kanal paneli -->
+  <div class="channel-overlay" id="channelOverlay">
+    <h2>Kanallar</h2>
+    <div class="search-container">
+      <input type="text" id="searchInput" placeholder="Kanal Ara..." />
+    </div>
+    <div class="channel-list" id="channelList">
+      <!-- Kanal öğeleri burada oluşturulacak -->
+    </div>
+  </div>
+
+  <!-- Yükleniyor göstergesi -->
+  <div class="loader" id="loader">Yükleniyor...</div>
+
+  <script>
+    let channels = [];            // Tüm kanallar
+    let filteredChannels = [];    // Arama/filtre sonrası kanallar
+    let currentChannelIndex = 0;
+    let overlayOpen = false;
+    let hls = null; // Global hls.js instance
+
+    const channelListEl = document.getElementById('channelList');
+    const channelOverlay = document.getElementById('channelOverlay');
+    const tvPlayer = document.getElementById('tvPlayer');
+    const loaderEl = document.getElementById('loader');
+    const searchInput = document.getElementById('searchInput');
+
+    // M3U verisini parse eden fonksiyon
+    function parseM3U(data) {
+      const lines = data.split('\n').map(line => line.trim());
+      const chList = [];
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].startsWith('#EXTINF:')) {
+          const extinfLine = lines[i];
+          const url = lines[i + 1] || "";
+          // Regex ile gerekli bilgileri çekiyoruz
+          const logoMatch = extinfLine.match(/tvg-logo="([^"]+)"/);
+          const idMatch = extinfLine.match(/tvg-id="([^"]+)"/);
+          const groupMatch = extinfLine.match(/group-title="([^"]+)"/);
+          const titleMatch = extinfLine.match(/,(.*)$/);
+          const channel = {
+            title: titleMatch ? titleMatch[1].trim() : "Bilinmeyen",
+            logo: logoMatch ? logoMatch[1] : "",
+            src: url,
+            tvgId: idMatch ? idMatch[1] : "",
+            group: groupMatch ? groupMatch[1] : ""
+          };
+          chList.push(channel);
+          i++; // URL satırını atla
+        }
+      }
+      return chList;
+    }
+
+    // M3U kaynağından kanalları yükle
+    async function loadChannels() {
+      try {
+	   //http://stream.tvcdn.net/lists/tr.m3u
+	   
+	  //https://raw.githubusercontent.com/aytacesmebasi/aypitivibi/refs/heads/master/aypitivibi.m3u
+	 
+	  //https://raw.githubusercontent.com/ipstreet312/freeiptv/master/all.m3u?utm_campaign=DonanimHaber
+	  
+	  //https://fths.pp.ua/iptv/tr.m3u 
+
+
+        const response = await fetch('http://stream.tvcdn.net/lists/tr.m3u');
+        const data = await response.text();
+        channels = parseM3U(data);
+      } catch (error) {
+        console.error('M3U yüklenirken hata:', error);
+        // Hata durumunda örnek veri
+        channels = [
+          {
+            title: 'TRT 1',
+            logo: 'http://assets.tvcdn.net/1045ea2f-2453-451d-a55f-ba17539641dd.png',
+            src: 'http://stream.tvcdn.net/ulusal/trt-1.m3u8'
+          },
+          {
+            title: 'atv',
+            logo: 'http://assets.tvcdn.net/89a47b4b-5d20-4248-9f4c-a3d2756072dd.png',
+            src: 'http://stream.tvcdn.net/ulusal/atv.m3u8'
+          }
+        ];
+      }
+      filteredChannels = channels;
+      renderChannelList();
+      loaderEl.style.display = 'none';
+      // İlk kanalı oynat
+      if (channels.length > 0) {
+        playChannel(0);
+      }
+    }
+
+    // Kanal listesini render eden fonksiyon
+    function renderChannelList() {
+      channelListEl.innerHTML = '';
+      filteredChannels.forEach((channel, index) => {
+        const div = document.createElement('div');
+        div.classList.add('channel-item');
+        div.setAttribute('data-index', index);
+        div.innerHTML = `
+          <div class="channel-thumbnail" style="background-image: url('${channel.logo}');"></div>
+          <div class="channel-title">${channel.title}</div>
+        `;
+        channelListEl.appendChild(div);
+      });
+      currentChannelIndex = 0;
+      updateFocus();
+    }
+
+    // Seçili kanalın odak durumunu güncelle
+    function updateFocus() {
+      const items = document.querySelectorAll('.channel-item');
+      items.forEach(item => item.classList.remove('focused'));
+      if (items[currentChannelIndex]) {
+        items[currentChannelIndex].classList.add('focused');
+        items[currentChannelIndex].scrollIntoView({ block: 'nearest' });
+      }
+    }
+
+    // Kanal panelini açıp kapatma
+    function toggleOverlay() {
+      overlayOpen = !overlayOpen;
+      if (overlayOpen) {
+        channelOverlay.classList.add('open');
+        searchInput.focus();
+        updateFocus();
+      } else {
+        channelOverlay.classList.remove('open');
+        searchInput.value = '';
+        filteredChannels = channels;
+        renderChannelList();
+      }
+    }
+
+    // Seçili kanalı oynat (hls.js entegrasyonu)
+    function playChannel(index) {
+      currentChannelIndex = index;
+      const channel = filteredChannels[index];
+      if (channel) {
+        // Önceki hls instance'ı temizle
+        if (hls) {
+          hls.destroy();
+          hls = null;
+        }
+        // Eğer HLS destekleniyorsa ve kaynak .m3u8 uzantılı ise hls.js kullan
+        if (Hls.isSupported() && channel.src.endsWith('.m3u8')) {
+          hls = new Hls();
+          hls.loadSource(channel.src);
+          hls.attachMedia(tvPlayer);
+          hls.on(Hls.Events.MANIFEST_PARSED, function() {
+            tvPlayer.play();
+          });
+          hls.on(Hls.Events.ERROR, function(event, data) {
+            console.error('HLS hata:', data);
+          });
+        } else if (tvPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+          tvPlayer.src = channel.src;
+          tvPlayer.play();
+        } else {
+          console.error('HLS desteği bulunamadı!');
+        }
+      }
+    }
+
+    // Arama: girilen kelimeye göre kanal listesini filtreleme
+    searchInput.addEventListener('input', function() {
+      const query = this.value.toLowerCase();
+      filteredChannels = channels.filter(ch => ch.title.toLowerCase().includes(query));
+      currentChannelIndex = 0;
+      renderChannelList();
+    });
+
+    // Klavye/kumanda kontrolü
+    document.addEventListener('keydown', function(e) {
+      if (overlayOpen) {
+        if (e.key === 'ArrowDown') {
+          currentChannelIndex = (currentChannelIndex + 1) % filteredChannels.length;
+          updateFocus();
+          e.preventDefault();
+        } else if (e.key === 'ArrowUp') {
+          currentChannelIndex = (currentChannelIndex - 1 + filteredChannels.length) % filteredChannels.length;
+          updateFocus();
+          e.preventDefault();
+        } else if (e.key === 'Enter') {
+          playChannel(currentChannelIndex);
+          toggleOverlay();
+          e.preventDefault();
+        } else if (e.key === 'Escape' || e.key === 'ArrowRight') {
+          toggleOverlay();
+          e.preventDefault();
+        }
+      } else {
+        if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'c') {
+          toggleOverlay();
+          e.preventDefault();
+        }
+      }
+    });
+
+    // Kanalları yükle
+    loadChannels();
+  </script>
+</body>
+</html>
