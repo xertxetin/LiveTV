@@ -407,6 +407,27 @@
 
     // Klavye / Kumanda kontrolü (TV kumandaları, klavye ve medya tuşları)
     document.addEventListener('keydown', function(e) {
+	
+	  // Bazı cihazlarda ses açma tuşu için 'VolumeUp', 'AudioVolumeUp' veya keyCode 175 kullanılabilir
+  if (e.key === 'VolumeUp' || e.key === 'AudioVolumeUp' || e.keyCode === 175) {
+    // Ses seviyesini %10 artırıyoruz (maksimum 1.0)
+    //tvPlayer.volume = Math.min(1, tvPlayer.volume + 0.1);
+	tvPlayer.muted = false;
+    //console.log('Ses artırıldı. Yeni seviye:', tvPlayer.volume);
+    
+	e.preventDefault();
+  }
+  
+  // Ses kısma tuşu için 'VolumeDown', 'AudioVolumeDown' veya keyCode 174 kullanılabilir
+  if (e.key === 'VolumeDown' || e.key === 'AudioVolumeDown' || e.keyCode === 174) {
+    // Ses seviyesini %10 azaltıyoruz (minimum 0)
+    //tvPlayer.volume = Math.max(0, tvPlayer.volume - 0.1);
+    //console.log('Ses azaltıldı. Yeni seviye:', tvPlayer.volume);
+	tvPlayer.muted = false;
+    e.preventDefault();
+  }
+	
+	
       // Medya tuşları: Örneğin, Play/Pause tuşu (Android TV kumandalarında olabilir)
       if (e.key === 'MediaPlayPause') {
         if (tvPlayer.paused) {
