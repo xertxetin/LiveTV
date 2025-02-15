@@ -193,7 +193,7 @@
     // M3U kaynağından kanalları yükle
     async function loadChannels() {
       try {
-        const response = await fetch('https://raw.githubusercontent.com/mehmetoff/TV/refs/heads/main/sinetech');
+        const response = await fetch('https://raw.githubusercontent.com/xertxetin/LiveTV/refs/heads/main/api/sinetech.txt');
         const data = await response.text();
         channels = parseM3U(data);
       } catch (error) {
