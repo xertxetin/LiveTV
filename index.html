@@ -34,23 +34,24 @@
       height: 100%;
       object-fit: cover;
     }
-    /* Kanal Paneli */
+    /* Kanal Paneli (Optimize için transform kullanıldı) */
     .channel-overlay {
       position: fixed;
       top: 0;
-      left: -500px;
+      left: 0;
       width: 350px;
       height: 100%;
       background: rgba(30, 30, 30, 0.95);
       box-shadow: 2px 0 15px rgba(0, 0, 0, 0.7);
-      transition: left 0.3s ease;
+      transition: transform 0.3s ease;
+      transform: translateX(-100%);
       z-index: 10;
       padding: 20px;
       display: flex;
       flex-direction: column;
     }
     .channel-overlay.open {
-      left: 0;
+      transform: translateX(0);
     }
     .channel-overlay h2 {
       margin: 0 0 20px;
@@ -94,13 +95,22 @@
       background: rgba(255,255,255,0.2);
       transform: scale(1.02);
     }
+    /* Kanal numarası stili */
+    .channel-number {
+      font-size: 16px;
+      font-weight: bold;
+      color: #fff;
+      margin-right: 10px;
+      width: 30px;
+      text-align: right;
+    }
     .channel-thumbnail {
       width: 60px;
       height: 60px;
       border-radius: 8px;
       background-size: cover;
       background-position: center;
-      margin-right: 15px;
+      margin: 0 15px;
       flex-shrink: 0;
       border: 2px solid #555;
     }
@@ -163,7 +173,7 @@
       font-size: 16px;
       color: #ccc;
     }
-    /* Digit Mode: Kanal numarası girişi için */
+    /* Digit Mode */
     .channel-info.digit-mode {
       justify-content: center;
       align-items: center;
@@ -184,7 +194,7 @@
       margin-top: 8px;
       color: #ccc;
     }
-    /* Sessiz Uyarı Stili */
+    /* Sessiz Uyarı */
     .mute-notification {
       position: absolute;
       bottom: 20px;
@@ -203,6 +213,20 @@
     .mute-notification img {
       width: 24px;
       height: 24px;
+    }
+    /* Hata Bildirimi */
+    .error-notification {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255, 0, 0, 0.8);
+      color: #fff;
+      font-size: 20px;
+      padding: 15px 30px;
+      border-radius: 8px;
+      z-index: 30;
+      display: none;
     }
   </style>
 </head>
@@ -228,12 +252,13 @@
   <div class="loader" id="loader">Yükleniyor...</div>
   <!-- Kanal Bilgi Kartı / Digit Mode Kartı -->
   <div class="channel-info" id="channelInfo"></div>
-  <!-- Sessiz Uyarı: Başlangıçta ses kapalı olduğundan gösteriliyor -->
+  <!-- Sessiz Uyarı -->
   <div class="mute-notification" id="muteNotification">
-    <!-- Simge olarak buraya bir resim ya da emoji ekleyebilirsiniz -->
     <span class="mute-icon">🔇</span>
     <span class="mute-text">Sessiz – OK tuşuna basarak sesi açın</span>
   </div>
+  <!-- Hata Bildirimi -->
+  <div class="error-notification" id="errorNotification">Sinyal Yok</div>
 
   <!-- Service Worker Kaydı (PWA destekli ise) -->
   <script>
@@ -250,7 +275,7 @@
     }
   </script>
 
-  <!-- Uygulama JS -->
+  <!-- Uygulama JS (HLS.js dahil) -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script>
     // Tüm mouse olaylarını engelle
@@ -271,9 +296,9 @@
     let digitBuffer = "";
     let digitTimeout = null;
     let digitHideTimeout = null;
-    let transitionTimeout = null; // Kanal geçiş animasyonu için zamanlayıcı
-    const digitDelay = 1500; // milisaniye
-
+    let transitionTimeout = null;
+    const digitDelay = 1500;
+  
     const channelListEl = document.getElementById('channelList');
     const channelOverlay = document.getElementById('channelOverlay');
     const tvPlayer = document.getElementById('tvPlayer');
@@ -281,7 +306,8 @@
     const searchInput = document.getElementById('searchInput');
     const channelInfoEl = document.getElementById('channelInfo');
     const muteNotification = document.getElementById('muteNotification');
-
+    const errorNotification = document.getElementById('errorNotification');
+  
     // M3U verisini parse et
     function parseM3U(data) {
       const lines = data.split('\n').map(line => line.trim());
@@ -307,7 +333,7 @@
       }
       return chList;
     }
-
+  
     // Kanalları yükle
     async function loadChannels() {
       try {
@@ -325,7 +351,7 @@
       filteredChannels = channels;
       renderChannelList();
       loaderEl.style.display = 'none';
-
+  
       // Önceki kanal kaydı varsa, onu kullan; yoksa ilk kanalı oynat
       const savedIndex = parseInt(localStorage.getItem('currentChannelIndex'), 10);
       if (!isNaN(savedIndex) && savedIndex >= 0 && savedIndex < filteredChannels.length) {
@@ -334,8 +360,8 @@
         playChannel(0);
       }
     }
-
-    // Kanal listesini oluştur
+  
+    // Kanal listesini oluştur (kanal numarası ekleniyor)
     function renderChannelList() {
       channelListEl.innerHTML = '';
       filteredChannels.forEach((channel, index) => {
@@ -343,6 +369,7 @@
         div.classList.add('channel-item');
         div.setAttribute('data-index', index);
         div.innerHTML =
+          '<div class="channel-number">' + (index + 1) + '.</div>' +
           '<div class="channel-thumbnail" style="background-image: url(\'' + channel.logo + '\');"></div>' +
           '<div class="channel-title">' + channel.title + '</div>';
         div.addEventListener('click', () => {
@@ -354,7 +381,7 @@
       });
       updateFocus();
     }
-
+  
     // Odak güncelleme
     function updateFocus() {
       const items = document.querySelectorAll('.channel-item');
@@ -368,7 +395,7 @@
         }
       }
     }
-
+  
     // Kanal panelini aç/kapa
     function toggleOverlay() {
       overlayOpen = !overlayOpen;
@@ -384,13 +411,23 @@
       overlayOpen = false;
       channelOverlay.classList.remove('open');
     }
-
-    // Kanal oynatma (hls.js entegrasyonu)
+  
+    // Hata mesajını göster/gizle
+    function showErrorNotification(message) {
+      errorNotification.textContent = message;
+      errorNotification.style.display = 'block';
+    }
+    function hideErrorNotification() {
+      errorNotification.style.display = 'none';
+    }
+  
+    // Kanal oynatma (HLS.js entegrasyonu ve hata kontrolü)
     function playChannel(index) {
       currentChannelIndex = index;
+      hideErrorNotification();
       const channel = filteredChannels[index];
       if (channel) {
-        // Kanal değiştiğinde geçerli indeksi kaydet
+        // Kanal seçildiğinde mevcut indeksi sakla
         localStorage.setItem('currentChannelIndex', currentChannelIndex);
         if (hls) {
           hls.destroy();
@@ -401,10 +438,13 @@
           hls.loadSource(channel.src);
           hls.attachMedia(tvPlayer);
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            // HLS manifest yüklendiğinde ek işlemler yapılabilir
+            // Her şey yolunda
           });
           hls.on(Hls.Events.ERROR, (event, data) => {
             console.error('HLS hata:', data);
+            if (data.fatal) {
+              showErrorNotification('Sinyal Yok');
+            }
           });
         } else if (tvPlayer.canPlayType('application/vnd.apple.mpegurl')) {
           tvPlayer.src = channel.src;
@@ -412,14 +452,13 @@
         } else {
           console.error('HLS desteği bulunamadı!');
         }
-        // Digit mode aktif değilse normal kanal bilgisini göster
         if (!digitBuffer) {
           showChannelInfo(channel, index);
         }
       }
     }
-
-    // Normal kanal geçiş kartını göster (ok tuşlarıyla yapılan geçişler için)
+  
+    // Normal kanal geçiş kartını göster
     function showChannelInfo(channel, index) {
       channelInfoEl.classList.remove('digit-mode');
       channelInfoEl.innerHTML = `
@@ -436,30 +475,26 @@
         channelInfoEl.classList.remove('show');
       }, 3000);
     }
-
-    // Klavye / Kumanda kontrolü (TV kumandaları, klavye ve medya tuşları)
+  
+    // Klavye/Kumanda kontrolü
     document.addEventListener('keydown', function(e) {
-      // Eğer sessiz uyarı ekranda görünüyorsa ve kullanıcı OK (Enter) tuşuna basarsa,
-      // önce sesi aç, uyarıyı gizle ve diğer işlemleri yapma.
+      // Sessiz uyarı ekranda ve OK (Enter) tuşuna basılırsa sesi aç
       if (tvPlayer.muted && muteNotification.style.display !== 'none' && e.key === 'Enter') {
         tvPlayer.muted = false;
         muteNotification.style.display = 'none';
         e.preventDefault();
         return;
       }
-      
-      // Bazı cihazlarda ses açma tuşu için 'VolumeUp', 'AudioVolumeUp' veya keyCode 175 kullanılabilir
+      // Ses aç/kıs tuşları
       if (e.key === 'VolumeUp' || e.key === 'AudioVolumeUp' || e.keyCode === 175) {
         tvPlayer.muted = false;
         e.preventDefault();
       }
-      // Ses kısma tuşu için 'VolumeDown', 'AudioVolumeDown' veya keyCode 174 kullanılabilir
       if (e.key === 'VolumeDown' || e.key === 'AudioVolumeDown' || e.keyCode === 174) {
         tvPlayer.muted = false;
         e.preventDefault();
       }
-      
-      // Medya tuşları: Örneğin, Play/Pause tuşu (Android TV kumandalarında olabilir)
+      // Play/Pause tuşu
       if (e.key === 'MediaPlayPause') {
         if (tvPlayer.paused) {
           tvPlayer.play();
@@ -469,8 +504,7 @@
         e.preventDefault();
         return;
       }
-
-      // Sayısal giriş: kanal numarası girişi (digit mode)
+      // Sayısal giriş (digit mode)
       if (e.key >= '0' && e.key <= '9') {
         digitBuffer += e.key;
         if (digitTimeout) clearTimeout(digitTimeout);
@@ -501,7 +535,6 @@
         e.preventDefault();
         return;
       }
-
       // Eğer kanal paneli açıksa
       if (overlayOpen) {
         if (e.key === 'ArrowDown') {
@@ -536,7 +569,12 @@
         }
       }
     });
-
+  
+    // Video hata kontrolü (non-HLS durumları)
+    tvPlayer.addEventListener('error', () => {
+      showErrorNotification('Sinyal Yok');
+    });
+  
     // Kanalları yükle
     loadChannels();
   </script>
