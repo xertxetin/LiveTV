@@ -76,7 +76,7 @@
     .channel-list {
       flex: 1;
       overflow-y: auto;
-	      overflow: hidden;
+      overflow: hidden;
     }
     .channel-item {
       display: flex;
@@ -119,32 +119,32 @@
       opacity: 0.8;
     }
     /* Kanal Bilgi Kartı */
-.channel-info {
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    display: flex;
-    align-items: center;
-    background: rgb(35 35 35 / 85%);
-    padding: 15px 25px;
-    border-radius: 8px;
-    z-index: 9;
-    opacity: 0;
-    transition: opacity 0.5sease, transform 0.5sease;
-    box-shadow: 0 0px 37px rgb(13 13 13 / 70%);
-}
+    .channel-info {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      display: flex;
+      align-items: center;
+      background: rgb(35 35 35 / 85%);
+      padding: 15px 25px;
+      border-radius: 8px;
+      z-index: 9;
+      opacity: 0;
+      transition: opacity 0.5s ease, transform 0.5s ease;
+      box-shadow: 0 0px 37px rgb(13 13 13 / 70%);
+    }
     .channel-info.show {
       opacity: 1;
       transform: translateY(0);
     }
     .channel-info img {
-    width: 50px;
-    height: 50px;
-    object-fit: cover;
-    border: 2px solid #fff;
-    margin-right: 20px;
-    border-radius: 50%;
-}
+      width: 50px;
+      height: 50px;
+      object-fit: cover;
+      border: 2px solid #fff;
+      margin-right: 20px;
+      border-radius: 50%;
+    }
     .channel-info .info-text {
       color: #fff;
       font-size: 18px;
@@ -185,8 +185,6 @@
     }
   </style>
 </head>
-  <!-- hls.js kütüphanesi -->
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <body>
   <!-- Video Alanı -->
   <div class="video-container">
@@ -210,7 +208,7 @@
   <!-- Kanal Bilgi Kartı / Digit Mode Kartı -->
   <div class="channel-info" id="channelInfo"></div>
 
-  <!-- Service Worker Kaydı -->
+  <!-- Service Worker Kaydı (PWA destekli ise) -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
@@ -226,6 +224,7 @@
   </script>
 
   <!-- Uygulama JS -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script>
     let channels = [];
     let filteredChannels = [];
@@ -235,14 +234,12 @@
     let digitBuffer = "";
     let digitTimeout = null;
     let digitHideTimeout = null;
-    let transitionTimeout = null; // Ok tuşlarıyla kanal geçişinde kullanılan zamanlayıcı
+    let transitionTimeout = null; // Kanal geçiş animasyonu için zamanlayıcı
     const digitDelay = 1500; // milisaniye
 
     const channelListEl = document.getElementById('channelList');
     const channelOverlay = document.getElementById('channelOverlay');
-    
-	const tvPlayer = document.getElementById('tvPlayer');
-	
+    const tvPlayer = document.getElementById('tvPlayer');
     const loaderEl = document.getElementById('loader');
     const searchInput = document.getElementById('searchInput');
     const channelInfoEl = document.getElementById('channelInfo');
@@ -359,12 +356,7 @@
           hls.loadSource(channel.src);
           hls.attachMedia(tvPlayer);
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          /*
- setTimeout(() => {
-tvPlayer.muted = false; 
-}, "2050"); console.log("sad");
-*/
-		   
+            // HLS manifest yüklendiğinde ek işlemler yapılabilir
           });
           hls.on(Hls.Events.ERROR, (event, data) => {
             console.error('HLS hata:', data);
@@ -375,7 +367,7 @@ tvPlayer.muted = false;
         } else {
           console.error('HLS desteği bulunamadı!');
         }
-        // Eğer digit mode aktif değilse, normal kanal geçiş kartını göster
+        // Digit mode aktif değilse normal kanal bilgisini göster
         if (!digitBuffer) {
           showChannelInfo(channel, index);
         }
@@ -399,21 +391,20 @@ tvPlayer.muted = false;
         channelInfoEl.classList.remove('show');
       }, 3000);
     }
-	
-// Örnekte sol ve sağ ok tuşlarına basıldığında ilgili elementlere tıklama simülasyonu gönderiyoruz.
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'ArrowLeft') {
-      // Sol ok tuşu: 'leftElement' için sol tıklama (button: 0)
-   tvPlayer.muted = false; 
-    } else if (e.key === 'ArrowRight') {
-      // Sağ ok tuşu: 'rightElement' için sağ tıklama (button: 2)
-    tvPlayer.muted = false; 
-      }
-  });
 
-
-    // Klavye kontrolü (sayısal tuşlar ve ok tuşları)
+    // Klavye / Kumanda kontrolü (TV kumandaları, klavye ve medya tuşları)
     document.addEventListener('keydown', function(e) {
+      // Medya tuşları: Örneğin, Play/Pause tuşu (Android TV kumandalarında olabilir)
+      if (e.key === 'MediaPlayPause') {
+        if (tvPlayer.paused) {
+          tvPlayer.play();
+        } else {
+          tvPlayer.pause();
+        }
+        e.preventDefault();
+        return;
+      }
+
       // Sayısal giriş: kanal numarası girişi (digit mode)
       if (e.key >= '0' && e.key <= '9') {
         digitBuffer += e.key;
@@ -445,16 +436,15 @@ tvPlayer.muted = false;
         e.preventDefault();
         return;
       }
-      // Kanal paneli açıksa
+
+      // Eğer kanal paneli açıksa
       if (overlayOpen) {
         if (e.key === 'ArrowDown') {
           currentChannelIndex = (currentChannelIndex + 1) % filteredChannels.length;
-         // playChannel(currentChannelIndex);
           updateFocus();
           e.preventDefault();
         } else if (e.key === 'ArrowUp') {
           currentChannelIndex = (currentChannelIndex - 1 + filteredChannels.length) % filteredChannels.length;
-         // playChannel(currentChannelIndex);
           updateFocus();
           e.preventDefault();
         } else if (e.key === 'Enter') {
@@ -466,7 +456,7 @@ tvPlayer.muted = false;
           e.preventDefault();
         }
       } else {
-        // Panel kapalıyken: sol ok veya "c" paneli açar, yukarı/aşağı ok kanal değiştirir
+        // Panel kapalıyken: sol ok veya "c" tuşu paneli açar, yukarı/aşağı ok kanal değiştirir
         if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'c') {
           toggleOverlay();
           e.preventDefault();
@@ -482,6 +472,11 @@ tvPlayer.muted = false;
       }
     });
 
+    // Kumanda için ekstra: Bazı Android TV kumandaları, otomatik olarak sağ/sol tıklama yerine
+    // sadece "Enter" ya da "DPAD_CENTER" tuşunu gönderir. Bu durumda "Enter" olayını kullanıyoruz.
+    // (Zaten yukarıdaki kodda "Enter" tuşu panelde seçim yapmak için kullanılıyor.)
+
+    // Kanalları yükle
     loadChannels();
   </script>
 </body>
