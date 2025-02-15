@@ -226,6 +226,18 @@
   <!-- Uygulama JS -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script>
+      // Tüm mouse olaylarını yakalayarak engelleyen fonksiyon
+    const disableMouseEvents = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    };
+
+    // Mouse ile ilgili olayları dinle ve iptal et
+    ['click', 'contextmenu', 'mousedown', 'mouseup', 'mousemove'].forEach(eventName => {
+      document.addEventListener(eventName, disableMouseEvents, true);
+    });
+  
     let channels = [];
     let filteredChannels = [];
     let currentChannelIndex = 0;
