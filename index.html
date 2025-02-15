@@ -34,7 +34,7 @@
       height: 100%;
       object-fit: cover;
     }
-    /* Kanal Paneli (Optimize için transform kullanıldı) */
+    /* Kanal Paneli (Optimizasyon için transform kullanıldı) */
     .channel-overlay {
       position: fixed;
       top: 0;
@@ -278,157 +278,127 @@
   <!-- Uygulama JS (HLS.js dahil) -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script>
-    // Tüm mouse olaylarını engelle
-    const disableMouseEvents = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      return false;
-    };
-    ['click', 'contextmenu', 'mousedown', 'mouseup', 'mousemove'].forEach(eventName => {
-      document.addEventListener(eventName, disableMouseEvents, true);
-    });
-  
-    let channels = [];
-    let filteredChannels = [];
-    let currentChannelIndex = 0;
-    let overlayOpen = false;
-    let hls = null;
-    let digitBuffer = "";
-    let digitTimeout = null;
-    let digitHideTimeout = null;
-    let transitionTimeout = null;
-    const digitDelay = 1500;
-  
-    const channelListEl = document.getElementById('channelList');
-    const channelOverlay = document.getElementById('channelOverlay');
-    const tvPlayer = document.getElementById('tvPlayer');
-    const loaderEl = document.getElementById('loader');
-    const searchInput = document.getElementById('searchInput');
-    const channelInfoEl = document.getElementById('channelInfo');
-    const muteNotification = document.getElementById('muteNotification');
-    const errorNotification = document.getElementById('errorNotification');
-  
-    // M3U verisini parse et
-    function parseM3U(data) {
-      const lines = data.split('\n').map(line => line.trim());
-      const chList = [];
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].startsWith('#EXTINF:')) {
-          const extinfLine = lines[i];
-          const url = lines[i + 1] || "";
-          const logoMatch = extinfLine.match(/tvg-logo="([^"]+)"/);
-          const idMatch = extinfLine.match(/tvg-id="([^"]+)"/);
-          const groupMatch = extinfLine.match(/group-title="([^"]+)"/);
-          const titleMatch = extinfLine.match(/,(.*)$/);
-          const channel = {
-            title: titleMatch ? titleMatch[1].trim() : "Bilinmeyen",
-            logo: logoMatch ? logoMatch[1] : "",
-            src: url,
-            tvgId: idMatch ? idMatch[1] : "",
-            group: groupMatch ? groupMatch[1] : ""
-          };
-          chList.push(channel);
-          i++; // URL satırını atla
+    (function() {
+      'use strict';
+      
+      /*** Değişkenler & Elemanlar ***/
+      const channelListEl    = document.getElementById('channelList');
+      const channelOverlay   = document.getElementById('channelOverlay');
+      const tvPlayer         = document.getElementById('tvPlayer');
+      const loaderEl         = document.getElementById('loader');
+      const searchInput      = document.getElementById('searchInput');
+      const channelInfoEl    = document.getElementById('channelInfo');
+      const muteNotification = document.getElementById('muteNotification');
+      const errorNotification= document.getElementById('errorNotification');
+      
+      let channels           = [];
+      let filteredChannels   = [];
+      let currentChannelIndex= 0;
+      let overlayOpen        = false;
+      let hls                = null;
+      let digitBuffer        = "";
+      let digitTimeout       = null;
+      let digitHideTimeout   = null;
+      let transitionTimeout  = null;
+      const digitDelay       = 1500;
+      
+      /*** Yardımcı Fonksiyonlar ***/
+      // M3U verisini parse et
+      function parseM3U(data) {
+        const lines = data.split('\n').map(line => line.trim());
+        const chList = [];
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].startsWith('#EXTINF:')) {
+            const extinfLine = lines[i];
+            const url = lines[i + 1] || "";
+            const logoMatch = extinfLine.match(/tvg-logo="([^"]+)"/);
+            const idMatch = extinfLine.match(/tvg-id="([^"]+)"/);
+            const groupMatch = extinfLine.match(/group-title="([^"]+)"/);
+            const titleMatch = extinfLine.match(/,(.*)$/);
+            const channel = {
+              title: titleMatch ? titleMatch[1].trim() : "Bilinmeyen",
+              logo: logoMatch ? logoMatch[1] : "",
+              src: url,
+              tvgId: idMatch ? idMatch[1] : "",
+              group: groupMatch ? groupMatch[1] : ""
+            };
+            chList.push(channel);
+            i++; // URL satırını atla
+          }
         }
+        return chList;
       }
-      return chList;
-    }
-  
-    // Kanalları yükle
-    async function loadChannels() {
-      try {
-        const response = await fetch('https://raw.githubusercontent.com/xertxetin/LiveTV/refs/heads/main/api/iptvlist.m3u');
-        const data = await response.text();
-        channels = parseM3U(data);
-      } catch (error) {
-        console.error('M3U yüklenirken hata:', error);
-        channels = [{
-          title: 'TRT 1',
-          logo: 'http://assets.tvcdn.net/1045ea2f-2453-451d-a55f-ba17539641dd.png',
-          src: 'http://stream.tvcdn.net/ulusal/trt-1.m3u8'
-        }];
+      
+      // Hata bildirimi göster/gizle
+      function showErrorNotification(message) {
+        errorNotification.textContent = message;
+        errorNotification.style.display = 'block';
       }
-      filteredChannels = channels;
-      renderChannelList();
-      loaderEl.style.display = 'none';
-  
-      // Önceki kanal kaydı varsa, onu kullan; yoksa ilk kanalı oynat
-      const savedIndex = parseInt(localStorage.getItem('currentChannelIndex'), 10);
-      if (!isNaN(savedIndex) && savedIndex >= 0 && savedIndex < filteredChannels.length) {
-        playChannel(savedIndex);
-      } else {
-        playChannel(0);
+      function hideErrorNotification() {
+        errorNotification.style.display = 'none';
       }
-    }
-  
-    // Kanal listesini oluştur (kanal numarası ekleniyor)
-    function renderChannelList() {
-      channelListEl.innerHTML = '';
-      filteredChannels.forEach((channel, index) => {
-        const div = document.createElement('div');
-        div.classList.add('channel-item');
-        div.setAttribute('data-index', index);
-        div.innerHTML =
-          '<div class="channel-number">' + (index + 1) + '.</div>' +
-          '<div class="channel-thumbnail" style="background-image: url(\'' + channel.logo + '\');"></div>' +
-          '<div class="channel-title">' + channel.title + '</div>';
-        div.addEventListener('click', () => {
-          currentChannelIndex = index;
-          playChannel(currentChannelIndex);
-          hideOverlay();
+      
+      // Kanal listesini oluştur (kanal numarası 1’den başlıyor)
+      function renderChannelList() {
+        // Bellek sızıntılarını önlemek için önce eski içeriği temizle
+        channelListEl.innerHTML = '';
+        filteredChannels.forEach((channel, index) => {
+          const div = document.createElement('div');
+          div.classList.add('channel-item');
+          div.setAttribute('data-index', index);
+          div.innerHTML = `
+            <div class="channel-number">${index + 1}.</div>
+            <div class="channel-thumbnail" style="background-image: url('${channel.logo}');"></div>
+            <div class="channel-title">${channel.title}</div>
+          `;
+          div.addEventListener('click', () => {
+            currentChannelIndex = index;
+            playChannel(currentChannelIndex);
+            hideOverlay();
+          });
+          channelListEl.appendChild(div);
         });
-        channelListEl.appendChild(div);
-      });
-      updateFocus();
-    }
-  
-    // Odak güncelleme
-    function updateFocus() {
-      const items = document.querySelectorAll('.channel-item');
-      items.forEach(item => item.classList.remove('focused'));
-      if (items[currentChannelIndex]) {
-        items[currentChannelIndex].classList.add('focused');
-        const containerRect = channelListEl.getBoundingClientRect();
-        const itemRect = items[currentChannelIndex].getBoundingClientRect();
-        if (itemRect.top < containerRect.top || itemRect.bottom > containerRect.bottom) {
-          items[currentChannelIndex].scrollIntoView({ block: 'center', behavior: 'smooth' });
+        updateFocus();
+      }
+      
+      // Odak güncelleme
+      function updateFocus() {
+        const items = document.querySelectorAll('.channel-item');
+        items.forEach(item => item.classList.remove('focused'));
+        if (items[currentChannelIndex]) {
+          items[currentChannelIndex].classList.add('focused');
+          const containerRect = channelListEl.getBoundingClientRect();
+          const itemRect = items[currentChannelIndex].getBoundingClientRect();
+          if (itemRect.top < containerRect.top || itemRect.bottom > containerRect.bottom) {
+            items[currentChannelIndex].scrollIntoView({ block: 'center', behavior: 'smooth' });
+          }
         }
       }
-    }
-  
-    // Kanal panelini aç/kapa
-    function toggleOverlay() {
-      overlayOpen = !overlayOpen;
-      if (overlayOpen) {
-        channelOverlay.classList.add('open');
-        searchInput.focus();
-        updateFocus();
-      } else {
+      
+      // Kanal panelini aç/kapa
+      function toggleOverlay() {
+        overlayOpen = !overlayOpen;
+        if (overlayOpen) {
+          channelOverlay.classList.add('open');
+          searchInput.focus();
+          updateFocus();
+        } else {
+          channelOverlay.classList.remove('open');
+        }
+      }
+      function hideOverlay() {
+        overlayOpen = false;
         channelOverlay.classList.remove('open');
       }
-    }
-    function hideOverlay() {
-      overlayOpen = false;
-      channelOverlay.classList.remove('open');
-    }
-  
-    // Hata mesajını göster/gizle
-    function showErrorNotification(message) {
-      errorNotification.textContent = message;
-      errorNotification.style.display = 'block';
-    }
-    function hideErrorNotification() {
-      errorNotification.style.display = 'none';
-    }
-  
-    // Kanal oynatma (HLS.js entegrasyonu ve hata kontrolü)
-    function playChannel(index) {
-      currentChannelIndex = index;
-      hideErrorNotification();
-      const channel = filteredChannels[index];
-      if (channel) {
-        // Kanal seçildiğinde mevcut indeksi sakla
+      
+      // Kanal oynatma (HLS.js entegrasyonu ve hata kontrolü)
+      function playChannel(index) {
+        currentChannelIndex = index;
+        hideErrorNotification();
+        const channel = filteredChannels[index];
+        if (!channel) return;
         localStorage.setItem('currentChannelIndex', currentChannelIndex);
+        // Eski HLS instance'ını temizle
         if (hls) {
           hls.destroy();
           hls = null;
@@ -438,7 +408,7 @@
           hls.loadSource(channel.src);
           hls.attachMedia(tvPlayer);
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            // Her şey yolunda
+            // Manifest yüklendi
           });
           hls.on(Hls.Events.ERROR, (event, data) => {
             console.error('HLS hata:', data);
@@ -456,127 +426,171 @@
           showChannelInfo(channel, index);
         }
       }
-    }
-  
-    // Normal kanal geçiş kartını göster
-    function showChannelInfo(channel, index) {
-      channelInfoEl.classList.remove('digit-mode');
-      channelInfoEl.innerHTML = `
-        <img src="${channel.logo}" alt="${channel.title} Logo">
-        <div class="info-text">
-          <div class="channel-number">Kanal ${index + 1}</div>
-          <div class="channel-title">${channel.title}</div>
-          ${channel.group ? `<div class="channel-group">${channel.group}</div>` : ''}
-        </div>
-      `;
-      channelInfoEl.classList.add('show');
-      if (transitionTimeout) clearTimeout(transitionTimeout);
-      transitionTimeout = setTimeout(() => {
-        channelInfoEl.classList.remove('show');
-      }, 3000);
-    }
-  
-    // Klavye/Kumanda kontrolü
-    document.addEventListener('keydown', function(e) {
-      // Sessiz uyarı ekranda ve OK (Enter) tuşuna basılırsa sesi aç
-      if (tvPlayer.muted && muteNotification.style.display !== 'none' && e.key === 'Enter') {
-        tvPlayer.muted = false;
-        muteNotification.style.display = 'none';
-        e.preventDefault();
-        return;
-      }
-      // Ses aç/kıs tuşları
-      if (e.key === 'VolumeUp' || e.key === 'AudioVolumeUp' || e.keyCode === 175) {
-        tvPlayer.muted = false;
-        e.preventDefault();
-      }
-      if (e.key === 'VolumeDown' || e.key === 'AudioVolumeDown' || e.keyCode === 174) {
-        tvPlayer.muted = false;
-        e.preventDefault();
-      }
-      // Play/Pause tuşu
-      if (e.key === 'MediaPlayPause') {
-        if (tvPlayer.paused) {
-          tvPlayer.play();
-        } else {
-          tvPlayer.pause();
-        }
-        e.preventDefault();
-        return;
-      }
-      // Sayısal giriş (digit mode)
-      if (e.key >= '0' && e.key <= '9') {
-        digitBuffer += e.key;
-        if (digitTimeout) clearTimeout(digitTimeout);
-        if (digitHideTimeout) clearTimeout(digitHideTimeout);
-        channelInfoEl.classList.add('digit-mode');
+      
+      // Kanal bilgisini göster
+      function showChannelInfo(channel, index) {
+        channelInfoEl.classList.remove('digit-mode');
+        channelInfoEl.innerHTML = `
+          <img src="${channel.logo}" alt="${channel.title} Logo">
+          <div class="info-text">
+            <div class="channel-number">Kanal ${index + 1}</div>
+            <div class="channel-title">${channel.title}</div>
+            ${channel.group ? `<div class="channel-group">${channel.group}</div>` : ''}
+          </div>
+        `;
         channelInfoEl.classList.add('show');
-        let previewHtml = `<div class="digit-number">${digitBuffer}</div>`;
-        const channelNumber = parseInt(digitBuffer, 10);
-        if (!isNaN(channelNumber) && channelNumber > 0 && channelNumber <= filteredChannels.length) {
-          const channel = filteredChannels[channelNumber - 1];
-          previewHtml += `<div class="digit-preview">Kanal ${channelNumber}: ${channel.title}</div>`;
+        if (transitionTimeout) clearTimeout(transitionTimeout);
+        transitionTimeout = setTimeout(() => {
+          channelInfoEl.classList.remove('show');
+        }, 3000);
+      }
+      
+      // Kanalları yükle
+      async function loadChannels() {
+        try {
+          const response = await fetch('https://raw.githubusercontent.com/xertxetin/LiveTV/refs/heads/main/api/iptvlist.m3u');
+          const data = await response.text();
+          channels = parseM3U(data);
+        } catch (error) {
+          console.error('M3U yüklenirken hata:', error);
+          channels = [{
+            title: 'TRT 1',
+            logo: 'http://assets.tvcdn.net/1045ea2f-2453-451d-a55f-ba17539641dd.png',
+            src: 'http://stream.tvcdn.net/ulusal/trt-1.m3u8'
+          }];
+        }
+        filteredChannels = channels;
+        renderChannelList();
+        loaderEl.style.display = 'none';
+        
+        // Daha önce kaydedilmiş kanal varsa onu yükle
+        const savedIndex = parseInt(localStorage.getItem('currentChannelIndex'), 10);
+        if (!isNaN(savedIndex) && savedIndex >= 0 && savedIndex < filteredChannels.length) {
+          playChannel(savedIndex);
         } else {
-          previewHtml += `<div class="digit-preview">Kanal ${digitBuffer}: Geçersiz</div>`;
+          playChannel(0);
         }
-        channelInfoEl.innerHTML = previewHtml;
-        digitTimeout = setTimeout(() => {
-          const num = parseInt(digitBuffer, 10);
-          if (!isNaN(num) && num > 0 && num <= filteredChannels.length) {
-            currentChannelIndex = num - 1;
-            playChannel(currentChannelIndex);
+      }
+      
+      /*** Event Listener’lar ***/
+      // Klavye/Kumanda kontrolü
+      document.addEventListener('keydown', function(e) {
+        // Sessiz uyarı görünüyorsa ve OK (Enter) tuşuna basılırsa sesi aç
+        if (tvPlayer.muted && muteNotification.style.display !== 'none' && e.key === 'Enter') {
+          tvPlayer.muted = false;
+          muteNotification.style.display = 'none';
+          e.preventDefault();
+          return;
+        }
+        // Ses açma/kısma tuşları
+        if (e.key === 'VolumeUp' || e.key === 'AudioVolumeUp' || e.keyCode === 175) {
+          tvPlayer.muted = false;
+          e.preventDefault();
+        }
+        if (e.key === 'VolumeDown' || e.key === 'AudioVolumeDown' || e.keyCode === 174) {
+          tvPlayer.muted = false;
+          e.preventDefault();
+        }
+        // Play/Pause
+        if (e.key === 'MediaPlayPause') {
+          if (tvPlayer.paused) {
+            tvPlayer.play();
+          } else {
+            tvPlayer.pause();
           }
-          digitBuffer = "";
-          digitHideTimeout = setTimeout(() => {
-            channelInfoEl.classList.remove('show');
-            channelInfoEl.classList.remove('digit-mode');
-          }, 500);
-        }, digitDelay);
-        e.preventDefault();
-        return;
-      }
-      // Eğer kanal paneli açıksa
-      if (overlayOpen) {
-        if (e.key === 'ArrowDown') {
-          currentChannelIndex = (currentChannelIndex + 1) % filteredChannels.length;
-          updateFocus();
           e.preventDefault();
-        } else if (e.key === 'ArrowUp') {
-          currentChannelIndex = (currentChannelIndex - 1 + filteredChannels.length) % filteredChannels.length;
-          updateFocus();
-          e.preventDefault();
-        } else if (e.key === 'Enter') {
-          playChannel(currentChannelIndex);
-          hideOverlay();
-          e.preventDefault();
-        } else if (e.key === 'Escape' || e.key === 'ArrowRight') {
-          hideOverlay();
-          e.preventDefault();
+          return;
         }
-      } else {
-        // Panel kapalıyken: sol ok veya "c" tuşu paneli açar, yukarı/aşağı ok kanal değiştirir
-        if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'c') {
-          toggleOverlay();
+        // Sayısal giriş (digit mode)
+        if (e.key >= '0' && e.key <= '9') {
+          digitBuffer += e.key;
+          if (digitTimeout) clearTimeout(digitTimeout);
+          if (digitHideTimeout) clearTimeout(digitHideTimeout);
+          channelInfoEl.classList.add('digit-mode');
+          channelInfoEl.classList.add('show');
+          let previewHtml = `<div class="digit-number">${digitBuffer}</div>`;
+          const channelNumber = parseInt(digitBuffer, 10);
+          if (!isNaN(channelNumber) && channelNumber > 0 && channelNumber <= filteredChannels.length) {
+            const channel = filteredChannels[channelNumber - 1];
+            previewHtml += `<div class="digit-preview">Kanal ${channelNumber}: ${channel.title}</div>`;
+          } else {
+            previewHtml += `<div class="digit-preview">Kanal ${digitBuffer}: Geçersiz</div>`;
+          }
+          channelInfoEl.innerHTML = previewHtml;
+          digitTimeout = setTimeout(() => {
+            const num = parseInt(digitBuffer, 10);
+            if (!isNaN(num) && num > 0 && num <= filteredChannels.length) {
+              currentChannelIndex = num - 1;
+              playChannel(currentChannelIndex);
+            }
+            digitBuffer = "";
+            digitHideTimeout = setTimeout(() => {
+              channelInfoEl.classList.remove('show');
+              channelInfoEl.classList.remove('digit-mode');
+            }, 500);
+          }, digitDelay);
           e.preventDefault();
-        } else if (e.key === 'ArrowUp') {
-          currentChannelIndex = (currentChannelIndex - 1 + filteredChannels.length) % filteredChannels.length;
-          playChannel(currentChannelIndex);
-          e.preventDefault();
-        } else if (e.key === 'ArrowDown') {
-          currentChannelIndex = (currentChannelIndex + 1) % filteredChannels.length;
-          playChannel(currentChannelIndex);
-          e.preventDefault();
+          return;
         }
-      }
-    });
-  
-    // Video hata kontrolü (non-HLS durumları)
-    tvPlayer.addEventListener('error', () => {
-      showErrorNotification('Sinyal Yok');
-    });
-  
-    // Kanalları yükle
-    loadChannels();
+        // Kanal paneli açıksa
+        if (overlayOpen) {
+          if (e.key === 'ArrowDown') {
+            currentChannelIndex = (currentChannelIndex + 1) % filteredChannels.length;
+            updateFocus();
+            e.preventDefault();
+          } else if (e.key === 'ArrowUp') {
+            currentChannelIndex = (currentChannelIndex - 1 + filteredChannels.length) % filteredChannels.length;
+            updateFocus();
+            e.preventDefault();
+          } else if (e.key === 'Enter') {
+            playChannel(currentChannelIndex);
+            hideOverlay();
+            e.preventDefault();
+          } else if (e.key === 'Escape' || e.key === 'ArrowRight') {
+            hideOverlay();
+            e.preventDefault();
+          }
+        } else {
+          // Panel kapalıyken sol ok veya 'c' tuşu paneli açar, yukarı/aşağı ok kanal değiştirir
+          if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'c') {
+            toggleOverlay();
+            e.preventDefault();
+          } else if (e.key === 'ArrowUp') {
+            currentChannelIndex = (currentChannelIndex - 1 + filteredChannels.length) % filteredChannels.length;
+            playChannel(currentChannelIndex);
+            e.preventDefault();
+          } else if (e.key === 'ArrowDown') {
+            currentChannelIndex = (currentChannelIndex + 1) % filteredChannels.length;
+            playChannel(currentChannelIndex);
+            e.preventDefault();
+          }
+        }
+      });
+      
+      // Video hata kontrolü (non-HLS durumları)
+      tvPlayer.addEventListener('error', () => {
+        showErrorNotification('Sinyal Yok');
+      });
+      
+      // Fare olaylarını engelle (gereksiz listener eklemesinin önüne geçmek için)
+      ['click', 'contextmenu', 'mousedown', 'mouseup', 'mousemove'].forEach(eventName => {
+        document.addEventListener(eventName, function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }, true);
+      });
+      
+      /*** Başlat ***/
+      loadChannels();
+      
+      // İsteğe bağlı: Unload sırasında event listener’ları temizleyerek bellek sızıntısını önleyebilirsiniz.
+      window.addEventListener('unload', function() {
+        document.removeEventListener('keydown', null);
+        tvPlayer.removeEventListener('error', null);
+      });
+      
+    })();
   </script>
 </body>
 </html>
