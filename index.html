@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TV Canlı Yayın Uygulaması</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
     /* Genel ayarlar */
     html, body {
@@ -16,7 +17,7 @@
       font-family: 'Roboto', sans-serif;
     }
     /* Tam ekran video kapsayıcısı */
-    .video-container {  
+    .video-container {
       position: absolute;
       top: 0;
       left: 0;
@@ -29,6 +30,47 @@
       height: 100%;
       object-fit: cover;
     }
+    /* Now Playing Paneli */
+    .now-playing {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.6);
+      border-radius: 8px;
+      padding: 10px 15px;
+      display: flex;
+      align-items: center;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+      z-index: 3;
+    }
+    .now-playing.show {
+      opacity: 1;
+    }
+    .now-playing img {
+      width: 40px;
+      height: 40px;
+      border-radius: 4px;
+      margin-right: 10px;
+    }
+    .now-playing .info {
+      color: #fff;
+      font-size: 18px;
+      font-weight: 500;
+    }
+    /* Kullanım talimatları */
+    .instructions {
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      font-size: 14px;
+      padding: 8px 16px;
+      border-radius: 4px;
+      z-index: 4;
+    }
     /* Kanal paneli (açılır/kapanır) */
     .channel-overlay {
       position: absolute;
@@ -36,7 +78,7 @@
       left: -370px; /* Başlangıçta ekran dışı */
       width: 350px;
       height: 100%;
-      background: rgba(20, 20, 20, 0.98);
+      background: linear-gradient(135deg, #1d1d1d, #292929);
       box-shadow: 2px 0 10px rgba(0, 0, 0, 0.7);
       transition: left 0.3s ease;
       z-index: 2;
@@ -51,6 +93,7 @@
       margin: 0 0 20px;
       text-align: center;
       font-size: 26px;
+      font-weight: 500;
       border-bottom: 1px solid #444;
       padding-bottom: 10px;
     }
@@ -65,27 +108,47 @@
       border-radius: 5px;
       outline: none;
       font-size: 16px;
+      background: #333;
+      color: #fff;
+      transition: background 0.3s;
+    }
+    .search-container input:focus {
+      background: #444;
     }
     /* Kanal listesi */
     .channel-list {
       flex: 1;
       overflow-y: auto;
+      padding-right: 10px; /* scrollbar için boşluk */
+    }
+    .group-header {
+      font-size: 16px;
+      color: #aaa;
+      margin: 10px 0 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
     .channel-item {
+      position: relative;
       display: flex;
       align-items: center;
       padding: 10px;
       margin-bottom: 15px;
       border-radius: 8px;
       background: rgba(255, 255, 255, 0.1);
-      transition: transform 0.2s, background 0.2s, box-shadow 0.2s;
+      transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+      cursor: pointer;
+    }
+    .channel-item:hover {
+      background: rgba(255, 255, 255, 0.15);
     }
     .channel-item.focused {
-      background: rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.25);
       box-shadow: 0 0 10px #ff0;
       transform: scale(1.03);
     }
     .channel-thumbnail {
+      position: relative;
       width: 60px;
       height: 60px;
       background-size: cover;
@@ -93,20 +156,23 @@
       border-radius: 8px;
       margin-right: 15px;
       flex-shrink: 0;
+      border: 2px solid #444;
+    }
+    /* Favori yıldız simgesi */
+    .favorite-star {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      font-size: 16px;
+      color: gold;
+      display: none;
+    }
+    .channel-item.favorited .favorite-star {
+      display: block;
     }
     .channel-title {
       font-size: 20px;
       color: #fff;
-    }
-    /* Yükleniyor göstergesi */
-    .loader {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      color: #fff;
-      font-size: 18px;
-      z-index: 3;
     }
   </style>
   <!-- hls.js kütüphanesi -->
@@ -116,37 +182,45 @@
   <!-- Tam ekran video alanı -->
   <div class="video-container">
     <video id="tvPlayer" autoplay muted>
-      <source src="https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4" type="video/mp4" />
+      <source src="https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4" type="video/mp4">
       Tarayıcınız video etiketini desteklemiyor.
     </video>
+    <!-- Now Playing Paneli -->
+    <div class="now-playing" id="nowPlaying">
+      <!-- İçerik JS ile eklenecek -->
+    </div>
   </div>
 
   <!-- Kanal paneli -->
   <div class="channel-overlay" id="channelOverlay">
     <h2>Kanallar</h2>
     <div class="search-container">
-      <input type="text" id="searchInput" placeholder="Kanal Ara..." />
+      <input type="text" id="searchInput" placeholder="Kanal Ara...">
     </div>
     <div class="channel-list" id="channelList">
       <!-- Kanal öğeleri burada oluşturulacak -->
     </div>
   </div>
 
-  <!-- Yükleniyor göstergesi -->
-  <div class="loader" id="loader">Yükleniyor...</div>
+  <!-- Kullanım talimatları -->
+  <div class="instructions">
+    ← / C: Menü | ↑ / ↓: Gezin | Enter: Seç | F: Favori | Esc / →: Kapat
+  </div>
 
   <script>
     let channels = [];            // Tüm kanallar
     let filteredChannels = [];    // Arama/filtre sonrası kanallar
     let currentChannelIndex = 0;
     let overlayOpen = false;
-    let hls = null; // Global hls.js instance
+    let hls = null;               // Global hls.js instance
+    const favorites = new Set();  // Favori kanalları tutar (tvgId veya title)
 
     const channelListEl = document.getElementById('channelList');
     const channelOverlay = document.getElementById('channelOverlay');
     const tvPlayer = document.getElementById('tvPlayer');
     const loaderEl = document.getElementById('loader');
     const searchInput = document.getElementById('searchInput');
+    const nowPlayingEl = document.getElementById('nowPlaying');
 
     // M3U verisini parse eden fonksiyon
     function parseM3U(data) {
@@ -156,7 +230,6 @@
         if (lines[i].startsWith('#EXTINF:')) {
           const extinfLine = lines[i];
           const url = lines[i + 1] || "";
-          // Regex ile gerekli bilgileri çekiyoruz
           const logoMatch = extinfLine.match(/tvg-logo="([^"]+)"/);
           const idMatch = extinfLine.match(/tvg-id="([^"]+)"/);
           const groupMatch = extinfLine.match(/group-title="([^"]+)"/);
@@ -166,7 +239,7 @@
             logo: logoMatch ? logoMatch[1] : "",
             src: url,
             tvgId: idMatch ? idMatch[1] : "",
-            group: groupMatch ? groupMatch[1] : ""
+            group: groupMatch ? groupMatch[1] : "Diğer"
           };
           chList.push(channel);
           i++; // URL satırını atla
@@ -175,74 +248,68 @@
       return chList;
     }
 
-    // M3U kaynağından kanalları yükle
-    async function loadChannels() {
-      try {
-	   //http://stream.tvcdn.net/lists/tr.m3u
-	   
-	  //https://raw.githubusercontent.com/aytacesmebasi/aypitivibi/refs/heads/master/aypitivibi.m3u
-	 
-	  //https://raw.githubusercontent.com/ipstreet312/freeiptv/master/all.m3u?utm_campaign=DonanimHaber
-	  
-	  //https://fths.pp.ua/iptv/tr.m3u 
-
-
-        const response = await fetch('http://stream.tvcdn.net/lists/tr.m3u');
-        const data = await response.text();
-        channels = parseM3U(data);
-      } catch (error) {
-        console.error('M3U yüklenirken hata:', error);
-        // Hata durumunda örnek veri
-        channels = [
-          {
-            title: 'TRT 1',
-            logo: 'http://assets.tvcdn.net/1045ea2f-2453-451d-a55f-ba17539641dd.png',
-            src: 'http://stream.tvcdn.net/ulusal/trt-1.m3u8'
-          },
-          {
-            title: 'atv',
-            logo: 'http://assets.tvcdn.net/89a47b4b-5d20-4248-9f4c-a3d2756072dd.png',
-            src: 'http://stream.tvcdn.net/ulusal/atv.m3u8'
-          }
-        ];
-      }
-      filteredChannels = channels;
-      renderChannelList();
-      loaderEl.style.display = 'none';
-      // İlk kanalı oynat
-      if (channels.length > 0) {
-        playChannel(0);
-      }
-    }
-
-    // Kanal listesini render eden fonksiyon
+    // Kanalları grup bazında ayırarak render et (grup başlığı ekleyerek)
     function renderChannelList() {
       channelListEl.innerHTML = '';
+      // İlk olarak favoriler ve grup bazlı sıralama yapılabilir.
+      // Örneğin, kanalları grup ismine göre ayırıyoruz:
+      const groups = {};
       filteredChannels.forEach((channel, index) => {
-        const div = document.createElement('div');
-        div.classList.add('channel-item');
-        div.setAttribute('data-index', index);
-        div.innerHTML = `
-          <div class="channel-thumbnail" style="background-image: url('${channel.logo}');"></div>
-          <div class="channel-title">${channel.title}</div>
-        `;
-        channelListEl.appendChild(div);
+        const group = channel.group || 'Diğer';
+        if (!groups[group]) {
+          groups[group] = [];
+        }
+        groups[group].push({ channel, index });
       });
-      currentChannelIndex = 0;
+      // Şimdi her grup için liste oluşturuyoruz
+      for (const group in groups) {
+        const groupHeader = document.createElement('div');
+        groupHeader.className = 'group-header';
+        groupHeader.textContent = group;
+        channelListEl.appendChild(groupHeader);
+        groups[group].forEach(item => {
+          const { channel, index } = item;
+          const div = document.createElement('div');
+          div.classList.add('channel-item');
+          div.setAttribute('data-index', index);
+          // Favori ise sınıf ekle
+          const key = channel.tvgId || channel.title;
+          if (favorites.has(key)) {
+            div.classList.add('favorited');
+          }
+          div.innerHTML = `
+            <div class="channel-thumbnail" style="background-image: url('${channel.logo}');">
+              <span class="favorite-star">&#9733;</span>
+            </div>
+            <div class="channel-title">${channel.title}</div>
+          `;
+          // Tıklamayla da seçilebilsin
+          div.addEventListener('click', () => {
+            currentChannelIndex = index;
+            playChannel(index);
+            toggleOverlay();
+          });
+          channelListEl.appendChild(div);
+        });
+      }
       updateFocus();
     }
 
-    // Seçili kanalın odak durumunu güncelle
+    // Seçili kanalın odak durumunu güncelle (görünür değilse ortala)
     function updateFocus() {
       const items = document.querySelectorAll('.channel-item');
       items.forEach(item => item.classList.remove('focused'));
       if (items[currentChannelIndex]) {
         items[currentChannelIndex].classList.add('focused');
-        items[currentChannelIndex].scrollIntoView({ block: 'nearest' });
+        const containerRect = channelListEl.getBoundingClientRect();
+        const itemRect = items[currentChannelIndex].getBoundingClientRect();
+        if (itemRect.top < containerRect.top || itemRect.bottom > containerRect.bottom) {
+          items[currentChannelIndex].scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
       }
     }
 
-    // Kanal panelini açıp kapatma
+    // Kanal panelini açıp kapatma (liste konumunu koru)
     function toggleOverlay() {
       overlayOpen = !overlayOpen;
       if (overlayOpen) {
@@ -251,10 +318,20 @@
         updateFocus();
       } else {
         channelOverlay.classList.remove('open');
-        searchInput.value = '';
-        filteredChannels = channels;
-        renderChannelList();
       }
+    }
+
+    // Now Playing panelini güncelle
+    function showNowPlaying(channel) {
+      nowPlayingEl.innerHTML = `
+        <img src="${channel.logo}" alt="${channel.title} Logo">
+        <div class="info">${channel.title} <br> <small>${channel.group}</small></div>
+      `;
+      nowPlayingEl.classList.add('show');
+      // 3 saniye sonra kaybolması için
+      setTimeout(() => {
+        nowPlayingEl.classList.remove('show');
+      }, 3000);
     }
 
     // Seçili kanalı oynat (hls.js entegrasyonu)
@@ -262,12 +339,11 @@
       currentChannelIndex = index;
       const channel = filteredChannels[index];
       if (channel) {
-        // Önceki hls instance'ı temizle
+        // Favori durumu, eğer listede değişiklik varsa burada da güncellenebilir.
         if (hls) {
           hls.destroy();
           hls = null;
         }
-        // Eğer HLS destekleniyorsa ve kaynak .m3u8 uzantılı ise hls.js kullan
         if (Hls.isSupported() && channel.src.endsWith('.m3u8')) {
           hls = new Hls();
           hls.loadSource(channel.src);
@@ -284,7 +360,21 @@
         } else {
           console.error('HLS desteği bulunamadı!');
         }
+        showNowPlaying(channel);
       }
+    }
+
+    // Favori durumunu değiştir (F tuşu)
+    function toggleFavorite() {
+      const channel = filteredChannels[currentChannelIndex];
+      if (!channel) return;
+      const key = channel.tvgId || channel.title;
+      if (favorites.has(key)) {
+        favorites.delete(key);
+      } else {
+        favorites.add(key);
+      }
+      renderChannelList();
     }
 
     // Arama: girilen kelimeye göre kanal listesini filtreleme
@@ -310,6 +400,10 @@
           playChannel(currentChannelIndex);
           toggleOverlay();
           e.preventDefault();
+        } else if (e.key.toLowerCase() === 'f') {
+          // Favori ekle/takibi
+          toggleFavorite();
+          e.preventDefault();
         } else if (e.key === 'Escape' || e.key === 'ArrowRight') {
           toggleOverlay();
           e.preventDefault();
@@ -322,7 +416,38 @@
       }
     });
 
-    // Kanalları yükle
+    // M3U kaynağından kanalları yükle
+    async function loadChannels() {
+      try {
+        const response = await fetch('http://stream.tvcdn.net/lists/tr.m3u');
+        const data = await response.text();
+        channels = parseM3U(data);
+      } catch (error) {
+        console.error('M3U yüklenirken hata:', error);
+        // Hata durumunda örnek veri
+        channels = [
+          {
+            title: 'TRT 1',
+            logo: 'http://assets.tvcdn.net/1045ea2f-2453-451d-a55f-ba17539641dd.png',
+            src: 'http://stream.tvcdn.net/ulusal/trt-1.m3u8',
+            group: 'Ulusal'
+          },
+          {
+            title: 'atv',
+            logo: 'http://assets.tvcdn.net/89a47b4b-5d20-4248-9f4c-a3d2756072dd.png',
+            src: 'http://stream.tvcdn.net/ulusal/atv.m3u8',
+            group: 'Ulusal'
+          }
+        ];
+      }
+      filteredChannels = channels;
+      renderChannelList();
+      // İlk kanalı oynat
+      if (channels.length > 0) {
+        playChannel(0);
+      }
+    }
+
     loadChannels();
   </script>
 </body>
