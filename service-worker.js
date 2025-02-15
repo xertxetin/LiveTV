@@ -5,9 +5,9 @@ const urlsToCache = [
   '/manifest.json',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png'
-  // Eklemek istediğiniz diğer dosyalar (CSS, JS, vs.)
 ];
 
+// Service Worker yüklenirken önbelleğe alma işlemi
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
@@ -15,26 +15,36 @@ self.addEventListener('install', (event) => {
         console.log('Cache oluşturuluyor...');
         return cache.addAll(urlsToCache);
       })
+      .catch(error => console.error('Cache ekleme hatası:', error))
   );
 });
 
+// Ağdan istekte bulunulduğunda önbellekten yanıt döndürme
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request)
       .then((response) => {
-        // Cache varsa döndür, yoksa fetch yap
-        return response || fetch(event.request);
+        return response || fetch(event.request)
+          .then((fetchResponse) => {
+            return caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, fetchResponse.clone());
+              return fetchResponse;
+            });
+          });
+      })
+      .catch(() => {
+        return caches.match('/index.html'); // Ağ yoksa fallback sayfası
       })
   );
 });
 
+// Eski cache'leri temizleme
 self.addEventListener('activate', (event) => {
-  const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
+          if (cacheName !== CACHE_NAME) {
             console.log('Eski cache siliniyor:', cacheName);
             return caches.delete(cacheName);
           }
