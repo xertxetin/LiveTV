@@ -1,5 +1,5 @@
 {
-  "name": "TV Canlı Yayın Uygulaması",
+  "name": "TV Canlı Yayın - BETA",
   "short_name": "LiveTV",
   "start_url": "./index.html",
   "display": "standalone",
@@ -18,5 +18,13 @@
     }
   ],
   "id": "xertxetin.github.io.livetv",
-  "description": "This project is for educational purposes only. Please do not abuse it!"
+  "description": "This project is for educational purposes only. Please do not abuse it!",
+  "orientation": "landscape",
+  "lang": "tr",
+  "dir": "ltr",
+  "categories": [
+    "lifestyle",
+    "personalization",
+    "productivity"
+  ]
 }
