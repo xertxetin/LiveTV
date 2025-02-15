@@ -184,12 +184,32 @@
       margin-top: 8px;
       color: #ccc;
     }
+    /* Sessiz Uyarı Stili */
+    .mute-notification {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      font-size: 18px;
+      padding: 10px 20px;
+      border-radius: 8px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .mute-notification img {
+      width: 24px;
+      height: 24px;
+    }
   </style>
 </head>
 <body>
   <!-- Video Alanı -->
   <div class="video-container">
-    <video id="tvPlayer"  poster="https://raw.githubusercontent.com/xertxetin/LiveTV/refs/heads/main/images/black.jpg" autoplay muted>
+    <video id="tvPlayer" poster="https://raw.githubusercontent.com/xertxetin/LiveTV/refs/heads/main/images/black.jpg" autoplay muted>
       <source src="https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4" type="video/mp4">
       Tarayıcınız video etiketini desteklemiyor.
     </video>
@@ -208,6 +228,12 @@
   <div class="loader" id="loader">Yükleniyor...</div>
   <!-- Kanal Bilgi Kartı / Digit Mode Kartı -->
   <div class="channel-info" id="channelInfo"></div>
+  <!-- Sessiz Uyarı: Başlangıçta ses kapalı olduğundan gösteriliyor -->
+  <div class="mute-notification" id="muteNotification">
+    <!-- Simge olarak buraya bir resim ya da emoji ekleyebilirsiniz -->
+    <span class="mute-icon">🔇</span>
+    <span class="mute-text">Sessiz – OK tuşuna basarak sesi açın</span>
+  </div>
 
   <!-- Service Worker Kaydı (PWA destekli ise) -->
   <script>
@@ -227,14 +253,12 @@
   <!-- Uygulama JS -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script>
-      // Tüm mouse olaylarını yakalayarak engelleyen fonksiyon
+    // Tüm mouse olaylarını engelle
     const disableMouseEvents = (e) => {
       e.preventDefault();
       e.stopPropagation();
       return false;
     };
-
-    // Mouse ile ilgili olayları dinle ve iptal et
     ['click', 'contextmenu', 'mousedown', 'mouseup', 'mousemove'].forEach(eventName => {
       document.addEventListener(eventName, disableMouseEvents, true);
     });
@@ -256,6 +280,7 @@
     const loaderEl = document.getElementById('loader');
     const searchInput = document.getElementById('searchInput');
     const channelInfoEl = document.getElementById('channelInfo');
+    const muteNotification = document.getElementById('muteNotification');
 
     // M3U verisini parse et
     function parseM3U(data) {
@@ -300,7 +325,12 @@
       filteredChannels = channels;
       renderChannelList();
       loaderEl.style.display = 'none';
-      if (channels.length > 0) {
+
+      // Önceki kanal kaydı varsa, onu kullan; yoksa ilk kanalı oynat
+      const savedIndex = parseInt(localStorage.getItem('currentChannelIndex'), 10);
+      if (!isNaN(savedIndex) && savedIndex >= 0 && savedIndex < filteredChannels.length) {
+        playChannel(savedIndex);
+      } else {
         playChannel(0);
       }
     }
@@ -360,6 +390,8 @@
       currentChannelIndex = index;
       const channel = filteredChannels[index];
       if (channel) {
+        // Kanal değiştiğinde geçerli indeksi kaydet
+        localStorage.setItem('currentChannelIndex', currentChannelIndex);
         if (hls) {
           hls.destroy();
           hls = null;
@@ -407,27 +439,26 @@
 
     // Klavye / Kumanda kontrolü (TV kumandaları, klavye ve medya tuşları)
     document.addEventListener('keydown', function(e) {
-	
-	  // Bazı cihazlarda ses açma tuşu için 'VolumeUp', 'AudioVolumeUp' veya keyCode 175 kullanılabilir
-  if (e.key === 'VolumeUp' || e.key === 'AudioVolumeUp' || e.keyCode === 175) {
-    // Ses seviyesini %10 artırıyoruz (maksimum 1.0)
-    //tvPlayer.volume = Math.min(1, tvPlayer.volume + 0.1);
-	tvPlayer.muted = false;
-    //console.log('Ses artırıldı. Yeni seviye:', tvPlayer.volume);
-    
-	e.preventDefault();
-  }
-  
-  // Ses kısma tuşu için 'VolumeDown', 'AudioVolumeDown' veya keyCode 174 kullanılabilir
-  if (e.key === 'VolumeDown' || e.key === 'AudioVolumeDown' || e.keyCode === 174) {
-    // Ses seviyesini %10 azaltıyoruz (minimum 0)
-    //tvPlayer.volume = Math.max(0, tvPlayer.volume - 0.1);
-    //console.log('Ses azaltıldı. Yeni seviye:', tvPlayer.volume);
-	tvPlayer.muted = false;
-    e.preventDefault();
-  }
-	
-	
+      // Eğer sessiz uyarı ekranda görünüyorsa ve kullanıcı OK (Enter) tuşuna basarsa,
+      // önce sesi aç, uyarıyı gizle ve diğer işlemleri yapma.
+      if (tvPlayer.muted && muteNotification.style.display !== 'none' && e.key === 'Enter') {
+        tvPlayer.muted = false;
+        muteNotification.style.display = 'none';
+        e.preventDefault();
+        return;
+      }
+      
+      // Bazı cihazlarda ses açma tuşu için 'VolumeUp', 'AudioVolumeUp' veya keyCode 175 kullanılabilir
+      if (e.key === 'VolumeUp' || e.key === 'AudioVolumeUp' || e.keyCode === 175) {
+        tvPlayer.muted = false;
+        e.preventDefault();
+      }
+      // Ses kısma tuşu için 'VolumeDown', 'AudioVolumeDown' veya keyCode 174 kullanılabilir
+      if (e.key === 'VolumeDown' || e.key === 'AudioVolumeDown' || e.keyCode === 174) {
+        tvPlayer.muted = false;
+        e.preventDefault();
+      }
+      
       // Medya tuşları: Örneğin, Play/Pause tuşu (Android TV kumandalarında olabilir)
       if (e.key === 'MediaPlayPause') {
         if (tvPlayer.paused) {
@@ -505,10 +536,6 @@
         }
       }
     });
-
-    // Kumanda için ekstra: Bazı Android TV kumandaları, otomatik olarak sağ/sol tıklama yerine
-    // sadece "Enter" ya da "DPAD_CENTER" tuşunu gönderir. Bu durumda "Enter" olayını kullanıyoruz.
-    // (Zaten yukarıdaki kodda "Enter" tuşu panelde seçim yapmak için kullanılıyor.)
 
     // Kanalları yükle
     loadChannels();
