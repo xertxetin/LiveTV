@@ -59,8 +59,9 @@
 1. **Clone the Repository:**
 
    ```bash
-   git clone https://github.com/yourusername/tv-live-stream-app.git
-   cd tv-live-stream-app
+   git clone https://github.com/xertxetin/LiveTV.git
+   cd LiveTV
+   run index.hmtl
    ```
 
 2. **Open the Application:**
