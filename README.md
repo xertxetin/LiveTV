@@ -1,8 +1,8 @@
-# TV Canlı Yayın Uygulaması
+# TV Live Broadcast App
 
 ## Overview
 
-**TV Canlı Yayın Uygulaması** is a web-based live TV streaming application built with HTML, CSS, and JavaScript. It uses the [HLS.js](https://github.com/video-dev/hls.js/) library to stream HLS video content and provides a TV-like user interface optimized for use with a remote control (or keyboard). The application fetches an M3U IPTV playlist, parses the channels, and displays them in an interactive, navigable menu.
+**TV Live Broadcast App** is a web-based live TV streaming application built with HTML, CSS, and JavaScript. It uses the [HLS.js](https://github.com/video-dev/hls.js/) library to stream HLS video content and provides a TV-like user interface optimized for use with a remote control (or keyboard). The application fetches an M3U IPTV playlist, parses the channels, and displays them in an interactive, navigable menu.
 
 ## Features
 
